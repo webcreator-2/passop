@@ -7,16 +7,20 @@ const cors = require('cors')
 dotenv.config()
 
 const url = process.env.MONGO_URI;
-const client = new MongoClient(url);
-client.connect();
+const client = new MongoClient(url, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  tls: true, // <-- ensures TLS is used
+});
 
-// Database Name
+
 const dbName = process.env.DB_NAME;
 const app = express()
 
-const port = 3000
-app.use(bodyparser.json())
-app.use(cors())
+const port = process.env.PORT || 3000; 
+
+app.use(bodyparser.json());
+app.use(cors());
 
 
 
@@ -42,6 +46,16 @@ app.delete('/', async(req, res) => {
     const findResult = await collection.deleteOne(password);
   res.send({success: true, result: findResult})
 })
+client.connect()
+  .then(() => {
+    console.log('Connected to MongoDB Atlas');
+    // Start your server here
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB connection failed:', err);
+  });
+
+
 
 // app.listen(port, () => {
 //   console.log(`Example app listening on port http://localhost:${port}`)
