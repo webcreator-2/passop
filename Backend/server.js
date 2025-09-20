@@ -43,6 +43,6 @@ app.delete('/', async(req, res) => {
   res.send({success: true, result: findResult})
 })
 
-app.listen(port, () => {
-  console.log(`Example app listening on port http://localhost:${port}`)
-})
+// app.listen(port, () => {
+//   console.log(`Example app listening on port http://localhost:${port}`)
+// })
