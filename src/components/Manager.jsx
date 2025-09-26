@@ -48,36 +48,13 @@ theme: "light",
        passwordRef.current.type = "password"
     }
   }
-//   const savePassword = async() =>{
-//   if(form.site.length >3 && form.username.length >3 && form.password.length >3){
-
-//   await fetch("http://localhost:3000/", {method:"DELETE", headers: {"Content-Type":"application/json"}, body: JSON.stringify({id: form.id}) })
-//  setpasswordArray([...passwordArray, { ...form, id: uuidv4()}])
-//  await fetch("http://localhost:3000/", {method:"POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ ...form, id: uuidv4() })})
-
-
-//  setform({site: "", username: "", password: ""})
-//   toast('Password saved!', {
-// position: "top-right",
-// autoClose: 5000,
-// hideProgressBar: false,
-// closeOnClick: false,
-// pauseOnHover: true,
-// draggable: true,
-// progress: undefined,
-// theme: "light",
-// });
-//   }
-//   else{
-//     toast('Error:Password not saved!');
-//   }
-//   }
+  
 const savePassword = async() => {
   if (form.site.length > 3 && form.username.length > 3 && form.password.length > 3) {
 
     // ✅ Only delete if editing (i.e., form.id exists)
     if (form.id) {
-      await fetch("http://localhost:3000/", {
+      await fetch("https://passop-5bk5.onrender.com", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: form.id })
@@ -90,7 +67,7 @@ const savePassword = async() => {
     // ✅ Add to array
     setpasswordArray([...passwordArray, newPassword]);
 
-    await fetch("http://localhost:3000/", {
+    await fetch("https://passop-5bk5.onrender.com", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newPassword)
@@ -126,7 +103,7 @@ const savePassword = async() => {
     if(c){
     setpasswordArray(passwordArray.filter(item=>item.id !== id))
 
-    await fetch("http://localhost:3000/", {method:"DELETE", headers: {"Content-Type":"application/json"}, body:JSON.stringify({ id}) })
+    await fetch("https://passop-5bk5.onrender.com", {method:"DELETE", headers: {"Content-Type":"application/json"}, body:JSON.stringify({ id}) })
     }
      toast('Password Deleted!', {
 position: "top-right",
