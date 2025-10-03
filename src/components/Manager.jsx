@@ -10,7 +10,7 @@ const Manager = () => {
   const [passwordArray, setpasswordArray] = useState([])
 
   const getPasswords = async() =>{
-    let req = await fetch("https://passop-5bk5.onrender.com")
+    let req = await fetch(`https://passop-wr4s.onrender.com/auth${endpoint}`)
     let passwords = await req.json()
     console.log(passwords)
     setpasswordArray(passwords)
@@ -54,7 +54,7 @@ const savePassword = async() => {
 
     // ✅ Only delete if editing (i.e., form.id exists)
     if (form.id) {
-      await fetch("https://passop-5bk5.onrender.com", {
+      await fetch(`https://passop-wr4s.onrender.com/auth${endpoint}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: form.id })
@@ -67,7 +67,7 @@ const savePassword = async() => {
     // ✅ Add to array
     setpasswordArray([...passwordArray, newPassword]);
 
-    await fetch("https://passop-5bk5.onrender.com", {
+    await fetch(`https://passop-wr4s.onrender.com/auth${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newPassword)
@@ -91,19 +91,13 @@ const savePassword = async() => {
   }
 };
 
-
-
-
-
-
-
   const deletePassword = async(id) =>{
     console.log("Deleting password with id", id)
     let c= confirm("Do you really want to delete this password?")
     if(c){
     setpasswordArray(passwordArray.filter(item=>item.id !== id))
 
-    await fetch("https://passop-5bk5.onrender.com", {method:"DELETE", headers: {"Content-Type":"application/json"}, body:JSON.stringify({ id}) })
+    await fetch(`https://passop-wr4s.onrender.com/auth${endpoint}`, {method:"DELETE", headers: {"Content-Type":"application/json"}, body:JSON.stringify({ id}) })
     }
      toast('Password Deleted!', {
 position: "top-right",
