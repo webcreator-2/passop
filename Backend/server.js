@@ -30,8 +30,8 @@ app.get('/passwords',authMiddleware, async (req, res) => {
     const db = client.db(dbName);
     const collection = db.collection('passwords');
     const findResult = await collection.find({userId: req.user.id}).toArray();
-    // res.json(findResult)
-    res.json(passwords)
+    res.json(findResult)
+
 })
 
 // Save a password
@@ -51,23 +51,13 @@ app.post("/passwords", authMiddleware, async (req, res) => {
 });
 
 // Delete a password by id
-// app.delete('/passwords',authMiddleware, async (req, res) => { 
-//     const password = req.body
-//     const db = client.db(dbName);
-//     const collection = db.collection('passwords');
-//     const findResult = await collection.deleteOne(password);
-//     res.send({success: true, result: findResult})
-// })
-
-app.delete("/passwords", authMiddleware, async (req, res) => {
-  const db = client.db(dbName);
-  const collection = db.collection("passwords");
-  const result = await collection.deleteOne({
-    _id: new ObjectId(req.body.id),
-    userId: req.user.id,
-  });
-  res.json({ success: true, result });
-});
+app.delete('/passwords',authMiddleware, async (req, res) => { 
+    const password = req.body
+    const db = client.db(dbName);
+    const collection = db.collection('passwords');
+    const findResult = await collection.deleteOne(password);
+    res.send({success: true, result: findResult})
+})
 
 
 app.listen(port, () => {
