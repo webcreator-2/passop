@@ -1,133 +1,152 @@
-import React, { use, useEffect } from 'react'
-import { useRef, useState } from 'react'
-import { ToastContainer, toast } from 'react-toastify';
-import { v4 as uuidv4 } from 'uuid';
+import React, { useEffect, useRef, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+
+const BASE_URL = "https://passop-wr4s.onrender.com";
 
 const Manager = () => {
-  const ref = useRef()
-  const passwordRef = useRef()
-  const [form, setform] = useState({site:"", username:"", password:""})
-  const [passwordArray, setpasswordArray] = useState([])
+  const ref = useRef();
+  const passwordRef = useRef();
+  const [form, setForm] = useState({ site: "", username: "", password: "" });
+  const [passwordArray, setPasswordArray] = useState([]);
 
-  const getPasswords = async() =>{
-    let req = await fetch(`https://passop-wr4s.onrender.com/passwords`,{
-       headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-    },
-    });
-    let passwords = await req.json()
-    console.log(passwords)
-    setpasswordArray(passwords)
+  // Make sure token is read fresh from localStorage
+  const getToken = () => localStorage.getItem("token");
 
-  }
- 
-  useEffect(() => {
-
-  getPasswords()
-
-  },[])
-  
-  const copyText = (text) =>{
-   toast('Copied to clipboard!', {
-position: "top-right",
-autoClose: 5000,
-hideProgressBar: false,
-closeOnClick: false,
-pauseOnHover: true,
-draggable: true,
-progress: undefined,
-theme: "light",
-});
-    navigator.clipboard.writeText(text)
-  }
-
-  const showPassword= () =>{
-    passwordRef.current.type = "text"
-    if(ref.current.src.includes("icons/hide.png")){
-      ref.current.src = "icons/dontshow.png"
-       passwordRef.current.type = "text"
+  const getPasswords = async () => {
+    const token = getToken();
+    if (!token) {
+      console.warn("No token - user not logged in");
+      return;
     }
-    else{
-      ref.current.src = "icons/hide.png"
-       passwordRef.current.type = "password"
-    }
-  }
-  
-const savePassword = async() => {
-  if (form.site.length > 3 && form.username.length > 3 && form.password.length > 3) {
 
-    // ✅ Only delete if editing (i.e., form.id exists)
-    if (form.id) {
-      await fetch(`https://passop-wr4s.onrender.com/passwords`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json",  "Authorization": `Bearer ${token}`},
-        body: JSON.stringify({ id: form.id })
+    try {
+      const res = await fetch(`${BASE_URL}/passwords`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
       });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error("GET /passwords failed:", res.status, txt);
+        return;
+      }
+      const passwords = await res.json();
+      setPasswordArray(passwords);
+    } catch (err) {
+      console.error("Error fetching passwords:", err);
+    }
+  };
+
+  useEffect(() => {
+    getPasswords();
+  }, []);
+
+  const copyText = (text) => {
+    navigator.clipboard.writeText(text);
+    toast("Copied to clipboard!", { position: "top-right", autoClose: 2000 });
+  };
+
+  const showPassword = () => {
+    if (!passwordRef.current || !ref.current) return;
+    if (ref.current.src.includes("icons/hide.png")) {
+      ref.current.src = "icons/dontshow.png";
+      passwordRef.current.type = "text";
+    } else {
+      ref.current.src = "icons/hide.png";
+      passwordRef.current.type = "password";
+    }
+  };
+
+  const savePassword = async () => {
+    if (form.site.length < 3 || form.username.length < 3 || form.password.length < 3) {
+      toast("Error: fill all fields");
+      return;
     }
 
-    // ✅ Use existing ID if editing, otherwise create a new one
-    const newPassword = { ...form, id: form.id || uuidv4() };
+    const token = getToken();
+    if (!token) {
+      toast("Not logged in");
+      return;
+    }
 
-    // ✅ Add to array
-    setpasswordArray([...passwordArray, newPassword]);
+    try {
+      // send the form as-is; backend will attach userId
+      const res = await fetch(`${BASE_URL}/passwords`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
 
-    await fetch(`https://passop-wr4s.onrender.com/passwords`, {
-      method: "POST",
-     headers: { "Content-Type": "application/json",  "Authorization": `Bearer ${token}`},
-      body: JSON.stringify(newPassword)
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error("POST /passwords failed:", res.status, txt);
+        toast("Save failed");
+        return;
+      }
+
+      const data = await res.json();
+      // Mongo returns insertedId in data.result.insertedId
+      const insertedId = data?.result?.insertedId || data?.result?._id || null;
+
+      // Add the saved item to local state so UI updates
+      const savedItem = insertedId ? { ...form, _id: insertedId } : { ...form };
+      setPasswordArray((prev) => [savedItem, ...prev]);
+
+      setForm({ site: "", username: "", password: "" });
+      toast("Password saved!", { position: "top-right", autoClose: 2000 });
+    } catch (err) {
+      console.error("Error saving password:", err);
+      toast("Save failed");
+    }
+  };
+const deletePassword = async (id) => {
+  const token = getToken();
+  if (!token) {
+    toast("Not logged in");
+    return;
+  }
+
+  if (!window.confirm("Do you really want to delete this password?")) return;
+
+  try {
+    const res = await fetch(`${BASE_URL}/passwords/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
 
-    setform({ site: "", username: "", password: "" });
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error("DELETE /passwords failed:", res.status, txt);
+      toast("Delete failed");
+      return;
+    }
 
-    toast('Password saved!', {
-      position: "top-right",
-      autoClose: 5000,
-      hideProgressBar: false,
-      closeOnClick: false,
-      pauseOnHover: true,
-      draggable: true,
-      progress: undefined,
-      theme: "light",
-    });
+    const data = await res.json();
+    if (!data.success) {
+      toast(data.message || "Delete failed");
+      return;
+    }
 
-  } else {
-    toast('Error:Password not saved!');
+    setPasswordArray((prev) => prev.filter((p) => String(p._id) !== String(id)));
+    toast("Password deleted permanently!", { position: "top-right", autoClose: 2000 });
+  } catch (err) {
+    console.error("Error deleting password:", err);
+    toast("Delete failed");
   }
 };
 
-  const deletePassword = async(id) =>{
-    console.log("Deleting password with id", id)
-    let c= confirm("Do you really want to delete this password?")
-    if(c){
-    setpasswordArray(passwordArray.filter(item=>item.id !== id))
+ 
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-    await fetch(`https://passop-wr4s.onrender.com/passwords`, {method:"DELETE",
-        headers: { "Content-Type": "application/json",  "Authorization": `Bearer ${token}`}, 
-       body:JSON.stringify({ id}) })
-    }
-     toast('Password Deleted!', {
-position: "top-right",
-autoClose: 5000,
-hideProgressBar: false,
-closeOnClick: false,
-pauseOnHover: true,
-draggable: true,
-progress: undefined,
-theme: "light",
-});
-  }
-  const editPassword = (id) =>{
-    console.log("Editing password with id",id)
-    setform({ ...passwordArray.filter(i=>i.id === id)[0], id: id})
-    setpasswordArray(passwordArray.filter(item=>item.id !== id))
-  }
-  const handleChange = (e) =>{
-      setform({ ...form, [e.target.name]: e.target.value})
-    }
   return (
     <>
-    <ToastContainer
+<ToastContainer
 position="top-right"
 autoClose={5000}
 hideProgressBar={false}
@@ -182,71 +201,71 @@ theme="light"
 
     </tr>
   </thead>
-  <tbody className='bg-green-100'>
-    {passwordArray.map((item, index)=>{
-      return <tr key={index}>
-    <td className='py-2 border border-white text-center'>
-      <div className='flex justify-center items-center'>
-        <a href={item.site} target='_blank'>{item.site}</a>
-    <div className='copyy w-5 h-5 cursor-pointer' onClick={()=>{copyText(item.site)}}>
-   <lord-icon
-    src="https://cdn.lordicon.com/cfkiwvcc.json"
-    trigger="hover"
-    style={{"width":"17px","height":"17px"}}>
-</lord-icon>
-    </div>
-</div>
-</td>
-
-      <td className='py-2 border border-white text-center'>
-        <div className='flex items-center justify-center' onClick={()=>{copyText(item.username)}}>
-        <span>{item.username}</span>
-        <div className='copyy w-5 h-5 cursor-pointer'>
-      <lord-icon
-    src="https://cdn.lordicon.com/cfkiwvcc.json"
-    trigger="hover"
-    style={{"width":"17px","height":"17px"}}>
-</lord-icon>
+  <tbody className="bg-green-100">
+  {passwordArray.map((item) => (
+    <tr key={item._id || item.id}>
+      <td className="py-2 border border-white text-center">
+        <div className="flex justify-center items-center">
+          <a href={item.site} target="_blank" rel="noreferrer">{item.site}</a>
+          <div
+            className="copyy w-5 h-5 cursor-pointer"
+            onClick={() => copyText(item.site)}
+          >
+            <lord-icon
+              src="https://cdn.lordicon.com/cfkiwvcc.json"
+              trigger="hover"
+              style={{ width: "17px", height: "17px" }}
+            />
+          </div>
         </div>
-        </div>
-        </td>
-
-      <td className='py-2 border border-white text-center'>
-        <div className='flex items-center justify-center'>
-          <span>{"•".repeat(item.password.length)}</span>
-          <div className='copyy w-5 h-5 cursor-pointer' onClick={()=>{copyText(item.password)}}>
-            
-      <lord-icon
-    src="https://cdn.lordicon.com/cfkiwvcc.json"
-    trigger="hover"
-    style={{"width":"17px","height":"17px"}}>
-</lord-icon>
-
-      </div>
-      </div>
       </td>
 
-      <td className='py-2 border border-white justify-center text-center'>
-        <span className='cursor-pointer mx-1' onClick={()=>{editPassword(item.id)}}>
-          <lord-icon
-    src="https://cdn.lordicon.com/valwmkhs.json"
-    trigger="hover"
-    style={{"width":"25px","height":"25px"}}>
-</lord-icon>
- </span>
-  <span className='cursor-pointer mx-1' onClick={()=>{deletePassword(item.id)}}>
-           <lord-icon
-    src="https://cdn.lordicon.com/oqeixref.json"
-    trigger="hover"
-    style={{"width":"25px","height":"25px"}}>
-</lord-icon>
+      <td className="py-2 border border-white text-center">
+        <div className="flex items-center justify-center" onClick={() => copyText(item.username)}>
+          <span>{item.username}</span>
+          <div className="copyy w-5 h-5 cursor-pointer">
+            <lord-icon
+              src="https://cdn.lordicon.com/cfkiwvcc.json"
+              trigger="hover"
+              style={{ width: "17px", height: "17px" }}
+            />
+          </div>
+        </div>
+      </td>
 
-       </span>
-      
+      <td className="py-2 border border-white text-center">
+        <div className="flex items-center justify-center">
+          <span>{"•".repeat(item.password.length)}</span>
+          <div className="copyy w-5 h-5 cursor-pointer" onClick={() => copyText(item.password)}>
+            <lord-icon
+              src="https://cdn.lordicon.com/cfkiwvcc.json"
+              trigger="hover"
+              style={{ width: "17px", height: "17px" }}
+            />
+          </div>
+        </div>
+      </td>
+
+      <td className="py-2 border border-white text-center">
+        <span className="cursor-pointer mx-1" onClick={() => editPassword(item._id || item.id)}>
+          <lord-icon
+            src="https://cdn.lordicon.com/valwmkhs.json"
+            trigger="hover"
+            style={{ width: "25px", height: "25px" }}
+          />
+        </span>
+        {/* <span className="cursor-pointer mx-1" onClick={() => deletePassword(item._id || item.id)}> */}
+        <span className="cursor-pointer mx-1" onClick={() => deletePassword(item._id)}>
+          <lord-icon
+            src="https://cdn.lordicon.com/oqeixref.json"
+            trigger="hover"
+            style={{ width: "25px", height: "25px" }}
+          />
+        </span>
       </td>
     </tr>
-    })}
-  </tbody>
+  ))}
+</tbody>
 </table>
 }
    </div>
