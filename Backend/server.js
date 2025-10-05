@@ -1,111 +1,323 @@
-const express = require('express')
-const dotenv = require('dotenv')
-const { MongoClient, ObjectId } = require('mongodb'); 
-const bodyparser = require('body-parser')
-const cors = require('cors')
-const authRoutes = require('./authRoutes');
-const authMiddleware = require('./authMiddleware');
+import React, { useEffect, useRef, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
 
-dotenv.config()
+const BASE_URL = "https://passop-wr4s.onrender.com";
 
+const Manager = () => {
+  const ref = useRef();
+  const passwordRef = useRef();
+  const [form, setForm] = useState({ site: "", username: "", password: "" });
+  const [passwordArray, setPasswordArray] = useState([]);
+  const [editId, setEditId] = useState(null); // track currently editing password
 
-// Connecting to the MongoDB Client
-const url = process.env.MONGO_URI;
-const client = new MongoClient(url);
-client.connect();
-console.log("Mongo connected")
+  const getToken = () => localStorage.getItem("token");
 
-// App & Database
-const dbName = process.env.DB_NAME 
-const app = express()
-const port = 3000 
+  // Fetch passwords
+  const getPasswords = async () => {
+    const token = getToken();
+    if (!token) return;
 
-// Middleware
-app.use(bodyparser.json())
-app.use(cors())
-app.use("/auth", authRoutes);
+    try {
+      const res = await fetch(`${BASE_URL}/passwords`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-// Get all the passwords
-app.get('/passwords',authMiddleware, async (req, res) => {
-    const db = client.db(dbName);
-    const collection = db.collection('passwords');
-    const findResult = await collection.find({userId: req.user.id}).toArray();
-    res.json(findResult)
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error("GET /passwords failed:", res.status, txt);
+        return;
+      }
 
-})
-app.post("/passwords", authMiddleware, async (req, res) => {
-  const db = client.db(dbName);
-  const collection = db.collection("passwords");
-  const newPassword = { ...req.body, userId: req.user.id };
-  const result = await collection.insertOne(newPassword);
-  res.json({ success: true, result });
-});
+      const passwords = await res.json();
+      setPasswordArray(passwords);
+    } catch (err) {
+      console.error("Error fetching passwords:", err);
+    }
+  };
 
-app.put('/passwords/:id', authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  const { site, username, password } = req.body;
-  const db = client.db(dbName);
-  const collection = db.collection('passwords');
+  useEffect(() => {
+    getPasswords();
+  }, []);
 
-  try {
-    const result = await collection.updateOne(
-      { _id: new ObjectId(id), userId: req.user.id }, // ensure only user’s own password
-      { $set: { site, username, password } }
-    );
+  const copyText = (text) => {
+    navigator.clipboard.writeText(text);
+    toast("Copied to clipboard!", { position: "top-right", autoClose: 2000 });
+  };
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ success: false, message: "Password not found" });
+  const showPassword = () => {
+    if (!passwordRef.current || !ref.current) return;
+    if (ref.current.src.includes("icons/hide.png")) {
+      ref.current.src = "icons/dontshow.png";
+      passwordRef.current.type = "text";
+    } else {
+      ref.current.src = "icons/hide.png";
+      passwordRef.current.type = "password";
+    }
+  };
+
+  // Save or Update password
+  const savePassword = async () => {
+    if (form.site.length < 3 || form.username.length < 3 || form.password.length < 3) {
+      toast("Error: fill all fields");
+      return;
     }
 
-    res.json({ success: true, result: { _id: id, site, username, password } });
-  } catch (err) {
-    console.error("Error updating password:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-
-
-// Delete a password by id
-// app.delete('/passwords',authMiddleware, async (req, res) => { 
-//     const password = req.body
-//     const db = client.db(dbName);
-//     const collection = db.collection('passwords');
-//     const findResult = await collection.deleteOne(password);
-//     res.send({success: true, result: findResult})
-// })
-// DELETE a password by id
-app.delete('/passwords/:id', authMiddleware, async (req, res) => {
-    const { id } = req.params;
-
-    if (!id) {
-        return res.status(400).json({ success: false, message: "No id provided" });
+    const token = getToken();
+    if (!token) {
+      toast("Not logged in");
+      return;
     }
 
     try {
-        const db = client.db(dbName);
-        const collection = db.collection('passwords');
+      let url = `${BASE_URL}/passwords`;
+      let method = "POST";
 
-        const result = await collection.deleteOne({
-            _id: new ObjectId(id),
-            userId: req.user.id
-        });
+      if (editId) {
+        url = `${BASE_URL}/passwords/${editId}`;
+        method = "PUT";
+      }
 
-        if (result.deletedCount === 0) {
-            return res.status(404).json({ success: false, message: "Password not found or not yours" });
-        }
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
 
-        res.json({ success: true, message: "Password deleted successfully" });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error(`${method} /passwords failed:`, res.status, txt);
+        toast("Operation failed");
+        return;
+      }
+
+      const data = await res.json();
+
+      if (editId) {
+        setPasswordArray((prev) =>
+          prev.map((p) => (p._id === editId ? { ...p, ...form } : p))
+        );
+        toast("Password updated!", { position: "top-right", autoClose: 2000 });
+      } else {
+        const insertedId = data?.result?.insertedId || data?.result?._id || null;
+        const savedItem = insertedId ? { ...form, _id: insertedId } : { ...form };
+        setPasswordArray((prev) => [savedItem, ...prev]);
+        toast("Password saved!", { position: "top-right", autoClose: 2000 });
+      }
+
+      setForm({ site: "", username: "", password: "" });
+      setEditId(null); // reset edit mode
     } catch (err) {
-        console.error("Error deleting password:", err);
-        res.status(500).json({ success: false, message: "Server error" });
+      console.error("Error saving password:", err);
+      toast("Operation failed");
     }
-});
+  };
 
+  const deletePassword = async (id) => {
+    const token = getToken();
+    if (!token) {
+      toast("Not logged in");
+      return;
+    }
 
+    if (!window.confirm("Do you really want to delete this password?")) return;
 
+    try {
+      const res = await fetch(`${BASE_URL}/passwords/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-app.listen(port, () => {
-    console.log(`Example app listening on  http://localhost:${port}`)
-})
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error("DELETE /passwords failed:", res.status, txt);
+        toast("Delete failed");
+        return;
+      }
 
+      const data = await res.json();
+      if (!data.success) {
+        toast(data.message || "Delete failed");
+        return;
+      }
+
+      setPasswordArray((prev) => prev.filter((p) => p._id !== id));
+      toast("Password deleted permanently!", { position: "top-right", autoClose: 2000 });
+    } catch (err) {
+      console.error("Error deleting password:", err);
+      toast("Delete failed");
+    }
+  };
+
+  // Prefill form for editing
+  const editPassword = (id) => {
+    const pass = passwordArray.find((p) => p._id === id);
+    if (!pass) return;
+    setForm({ site: pass.site, username: pass.username, password: pass.password });
+    setEditId(id);
+  };
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  return (
+    <>
+      <ToastContainer
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick={false}
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
+
+      <div className="absolute top-0 z-[-2] min-h-screen w-screen rotate-180 transform bg-[radial-gradient(60%_120%_at_50%_50%,transparent_0,rgba(185,255,200,0.6)_100%)] opacity-100 blur-[80px]"></div>
+
+      <div className="p-3 md:mycontainer min-h-[88.2vh]">
+        <h2 className="text-4xl font-bold text-center">
+          <span className="text-green-500">&lt;</span>
+          <span>Pass</span>
+          <span className="text-green-500">OP/&gt;</span>
+        </h2>
+        <p className="text-green-900 text-lg text-center">Your Own Password Manager</p>
+
+        <div className="flex flex-col p-4 text-black gap-8 items-center">
+          <input
+            value={form.site}
+            onChange={handleChange}
+            placeholder="Enter website URL"
+            className="rounded-full border border-green-500 w-full p-4 py-1"
+            type="text"
+            name="site"
+          />
+          <div className="flex flex-col md:flex-row w-full gap-8 justify-between">
+            <input
+              value={form.username}
+              onChange={handleChange}
+              placeholder="Enter Username"
+              className="rounded-full border border-green-500 w-full p-4 py-1"
+              type="text"
+              name="username"
+            />
+            <div className="relative w-full">
+              <input
+                ref={passwordRef}
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Enter Password"
+                className="rounded-full border border-green-500 w-full p-4 py-1"
+                type="password"
+                name="password"
+              />
+              <span
+                className="absolute right-2 text-black top-2 cursor-pointer"
+                onClick={showPassword}
+              >
+                <img ref={ref} width={20} src="icons/hide.png" alt="" />
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={savePassword}
+            className="flex justify-center gap-2 items-center bg-green-400 rounded-full px-8 py-2 w-fit border border-green-900 hover:bg-green-300"
+          >
+            <lord-icon src="https://cdn.lordicon.com/efxgwrkc.json" trigger="hover"></lord-icon>
+            {editId ? "Update" : "Save"}
+          </button>
+        </div>
+
+        <div className="passwords">
+          <h2 className="font-bold text-2xl py-4">Your Passwords</h2>
+          {passwordArray.length === 0 && <div>NO Passwords to show</div>}
+          {passwordArray.length !== 0 && (
+            <table className="table-auto w-full rounded-md overflow-hidden">
+              <thead className="bg-green-800 text-white">
+                <tr>
+                  <th className="py-2">Sites</th>
+                  <th className="py-2">Username</th>
+                  <th className="py-2">Password</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-green-100">
+                {passwordArray.map((item) => (
+                  <tr key={item._id}>
+                    <td className="py-2 border border-white text-center">
+                      <div className="flex justify-center items-center gap-1">
+                        <a href={item.site} target="_blank" rel="noreferrer">
+                          {item.site}
+                        </a>
+                        <div className="copyy w-5 h-5 cursor-pointer" onClick={() => copyText(item.site)}>
+                          <lord-icon
+                            src="https://cdn.lordicon.com/cfkiwvcc.json"
+                            trigger="hover"
+                            style={{ width: "17px", height: "17px" }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-2 border border-white text-center">
+                      <div className="flex items-center justify-center gap-1" onClick={() => copyText(item.username)}>
+                        <span>{item.username}</span>
+                        <div className="copyy w-5 h-5 cursor-pointer">
+                          <lord-icon
+                            src="https://cdn.lordicon.com/cfkiwvcc.json"
+                            trigger="hover"
+                            style={{ width: "17px", height: "17px" }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-2 border border-white text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{"•".repeat(item.password.length)}</span>
+                        <div className="copyy w-5 h-5 cursor-pointer" onClick={() => copyText(item.password)}>
+                          <lord-icon
+                            src="https://cdn.lordicon.com/cfkiwvcc.json"
+                            trigger="hover"
+                            style={{ width: "17px", height: "17px" }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-2 border border-white text-center flex justify-center gap-2">
+                      <span className="cursor-pointer" onClick={() => editPassword(item._id)}>
+                        <lord-icon
+                          src="https://cdn.lordicon.com/valwmkhs.json"
+                          trigger="hover"
+                          style={{ width: "25px", height: "25px" }}
+                        />
+                      </span>
+                      <span className="cursor-pointer" onClick={() => deletePassword(item._id)}>
+                        <lord-icon
+                          src="https://cdn.lordicon.com/oqeixref.json"
+                          trigger="hover"
+                          style={{ width: "25px", height: "25px" }}
+                        />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default Manager;
